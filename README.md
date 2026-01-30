@@ -1,5 +1,5 @@
 # WonderCity
-#### V1.0.3
+#### V1.0.4
 ## Description
 WonderCity is the new undercity utilizing a newer (and possibly more efficient) explorer (batmobile).
 Fully integrated and requires Alfred the butler, Batmobile and Looter.
@@ -32,6 +32,9 @@ WARNING: the only build that I have reliably able to complete Mythic tributes is
 - Follower explore? -- choose whether or not to explore undercity as follower 
 
 ## Changelog
+### V1.0.4
+Fix  reorder tribute triggering even when not enabled
+
 ### V1.0.3
 Implemented Reorder tribute
 

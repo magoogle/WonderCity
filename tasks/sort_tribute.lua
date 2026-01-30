@@ -9,6 +9,7 @@ local status_enum = {
     INTERACTING = 'interacting to stash',
     WALKING = 'walking to stash',
     SORTING = 'sorting dungeon keys',
+    FAILED = 'no selected tributes'
 }
 local task = {
     name = 'sort_tribute', -- change to your choice of task name
@@ -104,6 +105,7 @@ local sort_tribute = function (local_player)
         loot_manager.move_item_to_stash(tertiary)
         return
     end
+    task.status = status_enum['FAILED']
 end
 task.shouldExecute = function ()
     local local_player = get_local_player()
@@ -112,7 +114,8 @@ task.shouldExecute = function ()
     return utils.player_in_zone('Naha_Kurast') and
         player_pos:x() ~= 0 and player_pos:y() ~= 0 and
         utils.distance(player_pos, path[#path-1]) < 5 and
-        not is_correct_tribute() and get_stash() ~= nil
+        not is_correct_tribute() and get_stash() ~= nil and
+        settings.reorder_tribute
 end
 task.Execute = function ()
     local local_player = get_local_player()
