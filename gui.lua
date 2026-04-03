@@ -45,6 +45,46 @@ for _, tribute in ipairs(gui.tributes_data) do
     gui.tributes_enum[#gui.tributes_enum+1] = tribute.sno_id
 end
 
+-- Bargain options: needs_scroll=true means click scroll_bar first, then use cp_key click point
+gui.bargains_data = {
+    {name = 'Core Stats',            cp_key = 'core_stats',            needs_scroll = false},
+    {name = 'Primary Resource',      cp_key = 'primary_resource',      needs_scroll = false},
+    {name = 'Resistances',           cp_key = 'resistances',           needs_scroll = false},
+    {name = 'Offensive Legendaries', cp_key = 'offensive_legendaries', needs_scroll = false},
+    {name = 'Defensive Legendaries', cp_key = 'defensive_legendaries', needs_scroll = false},
+    {name = 'Utility Legendaries',   cp_key = 'utility_legendaries',   needs_scroll = false},
+    {name = 'Mobility Legendaries',  cp_key = 'mobility_legendaries',  needs_scroll = false},
+    {name = 'Resource Legendaries',  cp_key = 'resource_legendaries',  needs_scroll = false},
+    {name = 'Chaotic Uniques',       cp_key = 'defensive_legendaries', needs_scroll = true},
+    {name = 'More Weapons',          cp_key = 'utility_legendaries',   needs_scroll = true},
+    {name = 'More Armor',            cp_key = 'mobility_legendaries',  needs_scroll = true},
+    {name = 'More Jewelry',          cp_key = 'resource_legendaries',  needs_scroll = true},
+}
+-- Ordered list of click point keys (used for both element creation and render)
+gui.bargain_cp_keys = {
+    'bargain_opener',
+    'scroll_bar',
+    'core_stats',
+    'primary_resource',
+    'resistances',
+    'offensive_legendaries',
+    'defensive_legendaries',
+    'utility_legendaries',
+    'mobility_legendaries',
+    'resource_legendaries',
+}
+gui.bargain_cp_labels = {
+    bargain_opener        = 'Bargain Menu Opener',
+    scroll_bar            = 'Scroll Down Bar',
+    core_stats            = 'Core Stats',
+    primary_resource      = 'Primary Resource',
+    resistances           = 'Resistances',
+    offensive_legendaries = 'Offensive Legendaries',
+    defensive_legendaries = 'Defensive Legendaries (also Chaotic Uniques)',
+    utility_legendaries   = 'Utility Legendaries (also More Weapons)',
+    mobility_legendaries  = 'Mobility Legendaries (also More Armor)',
+    resource_legendaries  = 'Resource Legendaries (also More Jewelry)',
+}
 
 gui.plugin_label = plugin_label
 gui.plugin_version = plugin_version
@@ -63,23 +103,35 @@ gui.elements = {
     beacon_timeout = slider_int:new(0, 30, 10, get_hash(plugin_label .. '_' .. 'beacon_timeout')),
     batmobile_priority = combo_box:new(1, get_hash(plugin_label .. '_' .. 'batmobile_priority')),
 
-    reorder_tribute = create_checkbox(false, 'reorder_tribute'),
-    tribute_1 = combo_box:new(0, get_hash(plugin_label .. '_' .. 'tribute_1')),
-    tribute_2 = combo_box:new(0, get_hash(plugin_label .. '_' .. 'tribute_2')),
-    tribute_3 = combo_box:new(0, get_hash(plugin_label .. '_' .. 'tribute_3')),
+    tribute_priority_tree = tree_node:new(1),
 
-    select_tribute_click = create_checkbox(false, 'select_tribute_click'),
+    enable_bargains = create_checkbox(false, 'enable_bargains'),
+    bargain_timeout = slider_int:new(3, 60, 10, get_hash(plugin_label .. '_' .. 'bargain_timeout')),
+    bargain_priority_tree = tree_node:new(1),
+
+    click_points_tree = tree_node:new(1),
     portal_button_x = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_' .. 'portal_button_x')),
     portal_button_y = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_' .. 'portal_button_y')),
 
     party_settings_tree = tree_node:new(1),
     party_enabled = create_checkbox(false, 'party_enabled'),
     party_mode = combo_box:new(0, get_hash(plugin_label .. '_' .. 'party_mode')),
-    -- start_undercity_delay = slider_int:new(1, 300, 5, get_hash(plugin_label .. '_' .. 'start_undercity_delay')),
     confirm_delay = slider_int:new(1, 300, 5, get_hash(plugin_label .. '_' .. 'confirm_delay')),
     use_magoogle_tool = create_checkbox(false, 'use_magoogle_tool'),
     follower_explore = create_checkbox(false, 'follower_explore'),
 }
+-- Dynamic: tribute priority sliders
+for i in ipairs(gui.tributes_data) do
+    gui.elements['tribute_priority_' .. i] = slider_int:new(0, #gui.tributes_data, 0, get_hash(plugin_label .. '_tribute_priority_' .. i))
+end
+-- Dynamic: bargain priority sliders + click point sliders
+for i in ipairs(gui.bargains_data) do
+    gui.elements['bargain_priority_' .. i] = slider_int:new(0, #gui.bargains_data, 0, get_hash(plugin_label .. '_bargain_priority_' .. i))
+end
+for _, key in ipairs(gui.bargain_cp_keys) do
+    gui.elements['bargain_cp_' .. key .. '_x'] = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_bargain_cp_' .. key .. '_x'))
+    gui.elements['bargain_cp_' .. key .. '_y'] = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_bargain_cp_' .. key .. '_y'))
+end
 
 gui.render = function ()
     if not gui.elements.main_tree:push('WonderCity | Leoric | v' .. gui.plugin_version) then return end
@@ -115,19 +167,43 @@ gui.render = function ()
         gui.elements.enticement_timeout:render('Enticement delay (s)', 'time in seconds to wait before leaving enticement')
         gui.elements.beacon_timeout:render('Beacon delay (s)', 'time in seconds to wait before leaving beacon')
         gui.elements.loot_obols:render('Loot Obols', 'Loot Obols')
-        gui.elements.reorder_tribute:render('Reorder tribute', 'Use stash to reorder specific tribute to use')
-        if gui.elements.reorder_tribute:get() then
-            render_menu_header('Use stash to reorder dungeon keys inventory if the first slot is not any of the following tributes.')
-            gui.elements.tribute_1:render('Tribute 1', gui.tributes, 'Select which tribute to be priority 1')
-            gui.elements.tribute_2:render('Tribute 2', gui.tributes, 'Select which tribute to be priority 2')
-            gui.elements.tribute_3:render('Tribute 3', gui.tributes, 'Select which tribute to be priority 3')
+
+        if gui.elements.tribute_priority_tree:push('Tribute Priority') then
+            render_menu_header('Set priority for each tribute (0 = skip, 1 = highest priority)')
+            for i, tribute in ipairs(gui.tributes_data) do
+                gui.elements['tribute_priority_' .. i]:render(tribute.name, 'Priority for ' .. tribute.name .. ' (0 = skip)')
+            end
+            gui.elements.tribute_priority_tree:pop()
         end
-        gui.elements.select_tribute_click:render('Select tribute & open portal', 'After obelisk is activated: apply tribute then click Open Portal button')
-        if gui.elements.select_tribute_click:get() then
-            render_menu_header('Set the screen coordinates of the Open Portal button. A crosshair will mark the position.')
+
+        gui.elements.enable_bargains:render('Enable Bargains', 'Select a bargain from the obelisk before opening portal')
+        if gui.elements.enable_bargains:get() then
+            gui.elements.bargain_timeout:render('Bargain timeout (s)', 'Seconds to wait for portal before assuming bargain failed and trying next')
+            if gui.elements.bargain_priority_tree:push('Bargain Priority') then
+                render_menu_header('Set priority for each bargain (0 = skip, 1 = try first). Scrolled options reuse click points from the matching non-scrolled option.')
+                for i, bargain in ipairs(gui.bargains_data) do
+                    local scroll_note = bargain.needs_scroll and ' [scroll]' or ''
+                    gui.elements['bargain_priority_' .. i]:render(bargain.name .. scroll_note, 'Priority for ' .. bargain.name .. ' (0 = skip)')
+                end
+                gui.elements.bargain_priority_tree:pop()
+            end
+        end
+
+        if gui.elements.click_points_tree:push('Click Points Setup') then
+            render_menu_header('Portal Button - crosshair visible on screen when menu is open')
             gui.elements.portal_button_x:render('Portal Button X', 'Screen X coordinate of the Open Portal button')
             gui.elements.portal_button_y:render('Portal Button Y', 'Screen Y coordinate of the Open Portal button')
+            if gui.elements.enable_bargains:get() then
+                render_menu_header('Bargain Click Points - crosshairs visible on screen when menu is open')
+                for _, key in ipairs(gui.bargain_cp_keys) do
+                    local label = gui.bargain_cp_labels[key]
+                    gui.elements['bargain_cp_' .. key .. '_x']:render(label .. ' X', 'Screen X for ' .. label)
+                    gui.elements['bargain_cp_' .. key .. '_y']:render(label .. ' Y', 'Screen Y for ' .. label)
+                end
+            end
+            gui.elements.click_points_tree:pop()
         end
+
         gui.elements.undercity_settings_tree:pop()
     end
     if gui.elements.party_settings_tree:push('Party Settings') then

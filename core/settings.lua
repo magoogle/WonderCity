@@ -18,11 +18,22 @@ local settings = {
     enticement_timeout = 4,
     max_enticement = 4,
     batmobile_priority = 'distance',
-    reorder_tribute = false,
-    tribute_1 = 2125049,
-    tribute_2 = 2125049,
-    tribute_3 = 2125049,
-    select_tribute_click = false,
+    tribute_priorities = {},
+    enable_bargains = false,
+    bargain_timeout = 10,
+    bargain_priorities = {},
+    bargain_cp = {
+        bargain_opener        = {x = 960, y = 540},
+        scroll_bar            = {x = 960, y = 540},
+        core_stats            = {x = 960, y = 540},
+        primary_resource      = {x = 960, y = 540},
+        resistances           = {x = 960, y = 540},
+        offensive_legendaries = {x = 960, y = 540},
+        defensive_legendaries = {x = 960, y = 540},
+        utility_legendaries   = {x = 960, y = 540},
+        mobility_legendaries  = {x = 960, y = 540},
+        resource_legendaries  = {x = 960, y = 540},
+    },
     portal_button_x = 960,
     portal_button_y = 540,
 }
@@ -56,11 +67,28 @@ settings.update_settings = function ()
     settings.beacon_timeout = gui.elements.beacon_timeout:get()
     settings.max_enticement = gui.elements.max_enticement:get()
     settings.batmobile_priority = gui.batmobile_priority[gui.elements.batmobile_priority:get()+1]
-    settings.reorder_tribute = gui.elements.reorder_tribute:get()
-    settings.tribute_1 = gui.tributes_enum[gui.elements.tribute_1:get()+1]
-    settings.tribute_2 = gui.tributes_enum[gui.elements.tribute_2:get()+1]
-    settings.tribute_3 = gui.tributes_enum[gui.elements.tribute_3:get()+1]
-    settings.select_tribute_click = gui.elements.select_tribute_click:get()
+    settings.tribute_priorities = {}
+    for i, tribute in ipairs(gui.tributes_data) do
+        local p = gui.elements['tribute_priority_' .. i]:get()
+        if p > 0 then
+            settings.tribute_priorities[tribute.sno_id] = p
+        end
+    end
+    settings.enable_bargains = gui.elements.enable_bargains:get()
+    settings.bargain_timeout = gui.elements.bargain_timeout:get()
+    settings.bargain_priorities = {}
+    for i in ipairs(gui.bargains_data) do
+        local p = gui.elements['bargain_priority_' .. i]:get()
+        if p > 0 then
+            settings.bargain_priorities[i] = p
+        end
+    end
+    for _, key in ipairs(gui.bargain_cp_keys) do
+        settings.bargain_cp[key] = {
+            x = gui.elements['bargain_cp_' .. key .. '_x']:get(),
+            y = gui.elements['bargain_cp_' .. key .. '_y']:get(),
+        }
+    end
     settings.portal_button_x = gui.elements.portal_button_x:get()
     settings.portal_button_y = gui.elements.portal_button_y:get()
 end

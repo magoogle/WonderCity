@@ -29,15 +29,20 @@ local main_pulse = function  ()
         task_manager.execute_tasks()
     end
 end
+local draw_crosshair = function (cx, cy, label)
+    local arm = 12
+    graphics.line(vec2:new(cx - arm, cy), vec2:new(cx + arm, cy), color_red(220), 2)
+    graphics.line(vec2:new(cx, cy - arm), vec2:new(cx, cy + arm), color_red(220), 2)
+    graphics.circle_2d(vec2:new(cx, cy), 5, color_red(220), 1)
+    graphics.text_2d(label, vec2:new(cx + 14, cy - 8), 14, color_red(220))
+end
 local render_pulse = function  ()
-    if settings.select_tribute_click then
-        local cx = settings.portal_button_x
-        local cy = settings.portal_button_y
-        local arm = 12
-        graphics.line(vec2:new(cx - arm, cy), vec2:new(cx + arm, cy), color_red(220), 2)
-        graphics.line(vec2:new(cx, cy - arm), vec2:new(cx, cy + arm), color_red(220), 2)
-        graphics.circle_2d(vec2:new(cx, cy), 5, color_red(220), 1)
-        graphics.text_2d('Portal', vec2:new(cx + 14, cy - 8), 14, color_red(220))
+    draw_crosshair(settings.portal_button_x, settings.portal_button_y, 'Portal')
+    if settings.enable_bargains then
+        for _, key in ipairs(gui.bargain_cp_keys) do
+            local cp = settings.bargain_cp[key]
+            draw_crosshair(cp.x, cp.y, gui.bargain_cp_labels[key])
+        end
     end
     if not (settings.get_keybind_state()) then return end
     if not local_player or not settings.enabled then return end
