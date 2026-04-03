@@ -15,7 +15,9 @@ local task = {
     name = 'enter_undercity', -- change to your choice of task name
     status = status_enum['IDLE'],
     interacted = false,
-    debounce_time = -1
+    debounce_time = -1,
+    tribute_applied = false,
+    tribute_apply_time = -1,
 }
 local open_portal = function (delay)
     task.status = status_enum['OPENING']
@@ -25,10 +27,33 @@ local open_portal = function (delay)
         interact_object(spirit_brazier)
     elseif not task.interacted then
         task.interacted = true
+        task.tribute_applied = false
+        task.tribute_apply_time = -1
         -- call d4asistant here to trigger focus and insert tribute
     end
     if loot_manager:is_in_vendor_screen() then
-        task.status = status_enum['WAITING'] .. 'for d4 assistant'
+        if settings.select_tribute_click then
+            if not task.tribute_applied then
+                local lp = get_local_player()
+                if lp then
+                    local key_items = lp:get_dungeon_key_items()
+                    if key_items and key_items[1] then
+                        loot_manager.use_item(key_items[1])
+                        task.tribute_applied = true
+                        task.tribute_apply_time = get_time_since_inject()
+                    end
+                end
+                task.status = status_enum['WAITING'] .. 'applying tribute'
+            elseif get_time_since_inject() > task.tribute_apply_time + 0.5 then
+                utility.send_mouse_click(settings.portal_button_x, settings.portal_button_y)
+                task.tribute_applied = false
+                task.status = status_enum['OPENING']
+            else
+                task.status = status_enum['WAITING'] .. 'opening portal'
+            end
+        else
+            task.status = status_enum['WAITING'] .. 'for d4 assistant'
+        end
     elseif delay and
         task.debounce_time + settings.confirm_delay > get_time_since_inject()
     then

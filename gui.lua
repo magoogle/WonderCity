@@ -68,6 +68,9 @@ gui.elements = {
     tribute_2 = combo_box:new(0, get_hash(plugin_label .. '_' .. 'tribute_2')),
     tribute_3 = combo_box:new(0, get_hash(plugin_label .. '_' .. 'tribute_3')),
 
+    select_tribute_click = create_checkbox(false, 'select_tribute_click'),
+    portal_button_x = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_' .. 'portal_button_x')),
+    portal_button_y = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_' .. 'portal_button_y')),
 
     party_settings_tree = tree_node:new(1),
     party_enabled = create_checkbox(false, 'party_enabled'),
@@ -77,6 +80,7 @@ gui.elements = {
     use_magoogle_tool = create_checkbox(false, 'use_magoogle_tool'),
     follower_explore = create_checkbox(false, 'follower_explore'),
 }
+
 gui.render = function ()
     if not gui.elements.main_tree:push('WonderCity | Leoric | v' .. gui.plugin_version) then return end
     if AlfredTheButlerPlugin == nil then
@@ -117,6 +121,12 @@ gui.render = function ()
             gui.elements.tribute_1:render('Tribute 1', gui.tributes, 'Select which tribute to be priority 1')
             gui.elements.tribute_2:render('Tribute 2', gui.tributes, 'Select which tribute to be priority 2')
             gui.elements.tribute_3:render('Tribute 3', gui.tributes, 'Select which tribute to be priority 3')
+        end
+        gui.elements.select_tribute_click:render('Select tribute & open portal', 'After obelisk is activated: apply tribute then click Open Portal button')
+        if gui.elements.select_tribute_click:get() then
+            render_menu_header('Set the screen coordinates of the Open Portal button. A crosshair will mark the position.')
+            gui.elements.portal_button_x:render('Portal Button X', 'Screen X coordinate of the Open Portal button')
+            gui.elements.portal_button_y:render('Portal Button Y', 'Screen Y coordinate of the Open Portal button')
         end
         gui.elements.undercity_settings_tree:pop()
     end

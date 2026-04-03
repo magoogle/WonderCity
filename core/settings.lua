@@ -22,6 +22,9 @@ local settings = {
     tribute_1 = 2125049,
     tribute_2 = 2125049,
     tribute_3 = 2125049,
+    select_tribute_click = false,
+    portal_button_x = 960,
+    portal_button_y = 540,
 }
 
 settings.get_keybind_state = function ()
@@ -57,6 +60,9 @@ settings.update_settings = function ()
     settings.tribute_1 = gui.tributes_enum[gui.elements.tribute_1:get()+1]
     settings.tribute_2 = gui.tributes_enum[gui.elements.tribute_2:get()+1]
     settings.tribute_3 = gui.tributes_enum[gui.elements.tribute_3:get()+1]
+    settings.select_tribute_click = gui.elements.select_tribute_click:get()
+    settings.portal_button_x = gui.elements.portal_button_x:get()
+    settings.portal_button_y = gui.elements.portal_button_y:get()
 end
 
 return settings
