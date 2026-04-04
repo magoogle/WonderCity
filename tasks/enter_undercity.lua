@@ -120,12 +120,12 @@ local run_steps = function ()
 
     if task.step == STEP.TRIBUTE_WAIT then
         if waiting('tribute') then return end
-        -- After tribute, branch on bargains
         if settings.enable_bargains then
             task.step = STEP.BARGAIN_OPEN
         else
             task.step = STEP.OPEN_PORTAL
         end
+        return
     end
 
     -- ── Bargain only ──────────────────────────────────────────────────────
@@ -133,7 +133,6 @@ local run_steps = function ()
         local sorted = get_sorted_bargains()
         task.bargain_idx = task.bargain_idx + 1
         if task.bargain_idx > #sorted then
-            -- All bargains exhausted without success — skip straight to portal
             task.step = STEP.OPEN_PORTAL
         else
             local cp = settings.bargain_cp['bargain_opener']
@@ -154,6 +153,7 @@ local run_steps = function ()
         else
             task.step = STEP.BARGAIN_SELECT
         end
+        return
     end
 
     if task.step == STEP.BARGAIN_SCROLL then
@@ -168,6 +168,7 @@ local run_steps = function ()
     if task.step == STEP.BARGAIN_SCROLL_WAIT then
         if waiting('scroll') then return end
         task.step = STEP.BARGAIN_SELECT
+        return
     end
 
     if task.step == STEP.BARGAIN_SELECT then
@@ -186,6 +187,7 @@ local run_steps = function ()
     if task.step == STEP.BARGAIN_SELECT_WAIT then
         if waiting('bargain select') then return end
         task.step = STEP.OPEN_PORTAL
+        return
     end
 
     -- ── Shared: open portal ───────────────────────────────────────────────
@@ -200,6 +202,7 @@ local run_steps = function ()
     if task.step == STEP.OPEN_PORTAL_WAIT then
         if waiting('open portal') then return end
         task.step = STEP.ACCEPT
+        return
     end
 
     -- ── Shared: accept ────────────────────────────────────────────────────
@@ -213,21 +216,19 @@ local run_steps = function ()
 
     if task.step == STEP.ACCEPT_WAIT then
         if waiting('accept') then return end
-        -- Waiting for the portal actor to appear
         if now > task.step_time + CLICK_DELAY + settings.bargain_timeout then
             if settings.enable_bargains then
-                -- This bargain didn't have enough materials — walk away and retry
                 task.bargain_walk_away = true
-                task.step = STEP.BARGAIN_OPEN  -- will increment bargain_idx on next interact
+                task.step = STEP.BARGAIN_OPEN
                 task.step_time = -1
                 task.status = 'bargain failed - walking away'
             else
-                -- No bargains: just retry accept
                 task.step = STEP.ACCEPT
             end
         else
             task.status = status_enum['WAITING'] .. 'for portal'
         end
+        return
     end
 end
 
