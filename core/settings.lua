@@ -19,10 +19,14 @@ local settings = {
     max_enticement = 4,
     batmobile_priority = 'distance',
     tribute_priorities = {},
+    show_click_points = false,
+    accept_button_x = 960,
+    accept_button_y = 540,
     enable_bargains = false,
     bargain_timeout = 10,
     bargain_priorities = {},
     bargain_cp = {
+        sort_button           = {x = 960, y = 540},
         bargain_opener        = {x = 960, y = 540},
         scroll_bar            = {x = 960, y = 540},
         core_stats            = {x = 960, y = 540},
@@ -34,6 +38,9 @@ local settings = {
         mobility_legendaries  = {x = 960, y = 540},
         resource_legendaries  = {x = 960, y = 540},
     },
+    inventory_slot_0_x = 960,
+    inventory_slot_0_y = 540,
+    inventory_cell_size = 50,
     portal_button_x = 960,
     portal_button_y = 540,
 }
@@ -74,6 +81,9 @@ settings.update_settings = function ()
             settings.tribute_priorities[tribute.sno_id] = p
         end
     end
+    settings.show_click_points = gui.elements.show_click_points:get()
+    settings.accept_button_x = gui.elements.accept_button_x:get()
+    settings.accept_button_y = gui.elements.accept_button_y:get()
     settings.enable_bargains = gui.elements.enable_bargains:get()
     settings.bargain_timeout = gui.elements.bargain_timeout:get()
     settings.bargain_priorities = {}
@@ -89,6 +99,9 @@ settings.update_settings = function ()
             y = gui.elements['bargain_cp_' .. key .. '_y']:get(),
         }
     end
+    settings.inventory_slot_0_x = gui.elements.inventory_slot_0_x:get()
+    settings.inventory_slot_0_y = gui.elements.inventory_slot_0_y:get()
+    settings.inventory_cell_size = gui.elements.inventory_cell_size:get()
     settings.portal_button_x = gui.elements.portal_button_x:get()
     settings.portal_button_y = gui.elements.portal_button_y:get()
 end

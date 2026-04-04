@@ -62,6 +62,7 @@ gui.bargains_data = {
 }
 -- Ordered list of click point keys (used for both element creation and render)
 gui.bargain_cp_keys = {
+    'sort_button',
     'bargain_opener',
     'scroll_bar',
     'core_stats',
@@ -74,6 +75,7 @@ gui.bargain_cp_keys = {
     'resource_legendaries',
 }
 gui.bargain_cp_labels = {
+    sort_button           = 'Sort Button (inventory)',
     bargain_opener        = 'Bargain Menu Opener',
     scroll_bar            = 'Scroll Down Bar',
     core_stats            = 'Core Stats',
@@ -85,6 +87,7 @@ gui.bargain_cp_labels = {
     mobility_legendaries  = 'Mobility Legendaries (also More Armor)',
     resource_legendaries  = 'Resource Legendaries (also More Jewelry)',
 }
+
 
 gui.plugin_label = plugin_label
 gui.plugin_version = plugin_version
@@ -110,8 +113,14 @@ gui.elements = {
     bargain_priority_tree = tree_node:new(1),
 
     click_points_tree = tree_node:new(1),
+    show_click_points = create_checkbox(false, 'show_click_points'),
+    accept_button_x = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_' .. 'accept_button_x')),
+    accept_button_y = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_' .. 'accept_button_y')),
     portal_button_x = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_' .. 'portal_button_x')),
     portal_button_y = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_' .. 'portal_button_y')),
+    inventory_slot_0_x = slider_int:new(0, 3840, 960, get_hash(plugin_label .. '_' .. 'inventory_slot_0_x')),
+    inventory_slot_0_y = slider_int:new(0, 2160, 540, get_hash(plugin_label .. '_' .. 'inventory_slot_0_y')),
+    inventory_cell_size = slider_int:new(20, 200, 50, get_hash(plugin_label .. '_' .. 'inventory_cell_size')),
 
     party_settings_tree = tree_node:new(1),
     party_enabled = create_checkbox(false, 'party_enabled'),
@@ -190,11 +199,20 @@ gui.render = function ()
         end
 
         if gui.elements.click_points_tree:push('Click Points Setup') then
-            render_menu_header('Portal Button - crosshair visible on screen when menu is open')
-            gui.elements.portal_button_x:render('Portal Button X', 'Screen X coordinate of the Open Portal button')
-            gui.elements.portal_button_y:render('Portal Button Y', 'Screen Y coordinate of the Open Portal button')
-            if gui.elements.enable_bargains:get() then
-                render_menu_header('Bargain Click Points - crosshairs visible on screen when menu is open')
+            gui.elements.show_click_points:render('Show Click Points', 'Show crosshairs on screen for all configured click point positions')
+            if not gui.elements.enable_bargains:get() then
+                render_menu_header('Accept Button (no bargains)')
+                gui.elements.accept_button_x:render('Accept Button X', 'Screen X coordinate of the Accept button')
+                gui.elements.accept_button_y:render('Accept Button Y', 'Screen Y coordinate of the Accept button')
+            else
+                render_menu_header('Inventory - Slot 0 is the top-left sigil slot (4 columns wide)')
+                gui.elements.inventory_slot_0_x:render('Slot 0 X', 'Screen X of the center of the top-left inventory slot')
+                gui.elements.inventory_slot_0_y:render('Slot 0 Y', 'Screen Y of the center of the top-left inventory slot')
+                gui.elements.inventory_cell_size:render('Cell Size (px)', 'Pixel distance between slot centers')
+                render_menu_header('Open Portal Button (bargains)')
+                gui.elements.portal_button_x:render('Portal Button X', 'Screen X coordinate of the Open Portal button')
+                gui.elements.portal_button_y:render('Portal Button Y', 'Screen Y coordinate of the Open Portal button')
+                render_menu_header('Bargain Click Points')
                 for _, key in ipairs(gui.bargain_cp_keys) do
                     local label = gui.bargain_cp_labels[key]
                     gui.elements['bargain_cp_' .. key .. '_x']:render(label .. ' X', 'Screen X for ' .. label)

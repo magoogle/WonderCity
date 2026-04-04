@@ -29,19 +29,40 @@ local main_pulse = function  ()
         task_manager.execute_tasks()
     end
 end
-local draw_crosshair = function (cx, cy, label)
+local cp_colors = {
+    accept                = color_green(220),
+    portal                = color_red(220),
+    inventory_slot_0      = color_white(200),
+    sort_button           = color_cyan(220),
+    bargain_opener        = color_yellow(220),
+    scroll_bar            = color_green(220),
+    core_stats            = color_cyan(220),
+    primary_resource      = color_blue(220),
+    resistances           = color_purple(220),
+    offensive_legendaries = color_orange(220),
+    defensive_legendaries = color_red(180),
+    utility_legendaries   = color_green(180),
+    mobility_legendaries  = color_blue(180),
+    resource_legendaries  = color_yellow(180),
+}
+local draw_crosshair = function (cx, cy, label, color)
     local arm = 12
-    graphics.line(vec2:new(cx - arm, cy), vec2:new(cx + arm, cy), color_red(220), 2)
-    graphics.line(vec2:new(cx, cy - arm), vec2:new(cx, cy + arm), color_red(220), 2)
-    graphics.circle_2d(vec2:new(cx, cy), 5, color_red(220), 1)
-    graphics.text_2d(label, vec2:new(cx + 14, cy - 8), 14, color_red(220))
+    graphics.line(vec2:new(cx - arm, cy), vec2:new(cx + arm, cy), color, 2)
+    graphics.line(vec2:new(cx, cy - arm), vec2:new(cx, cy + arm), color, 2)
+    graphics.circle_2d(vec2:new(cx, cy), 5, color, 1)
+    graphics.text_2d(label, vec2:new(cx + 14, cy - 8), 14, color)
 end
 local render_pulse = function  ()
-    draw_crosshair(settings.portal_button_x, settings.portal_button_y, 'Portal')
-    if settings.enable_bargains then
-        for _, key in ipairs(gui.bargain_cp_keys) do
-            local cp = settings.bargain_cp[key]
-            draw_crosshair(cp.x, cp.y, gui.bargain_cp_labels[key])
+    if settings.show_click_points then
+        if not settings.enable_bargains then
+            draw_crosshair(settings.accept_button_x, settings.accept_button_y, 'Accept', cp_colors.accept)
+        else
+            draw_crosshair(settings.portal_button_x, settings.portal_button_y, 'Open Portal', cp_colors.portal)
+            draw_crosshair(settings.inventory_slot_0_x, settings.inventory_slot_0_y, 'Slot 0', cp_colors.inventory_slot_0)
+            for _, key in ipairs(gui.bargain_cp_keys) do
+                local cp = settings.bargain_cp[key]
+                draw_crosshair(cp.x, cp.y, gui.bargain_cp_labels[key], cp_colors[key])
+            end
         end
     end
     if not (settings.get_keybind_state()) then return end
