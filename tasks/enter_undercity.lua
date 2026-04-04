@@ -1,4 +1,4 @@
-local plugin_label = 'wonder_city' -- change to your plugin name
+local plugin_label = 'wonder_city'
 
 local gui = require 'gui'
 local utils = require "core.utils"
@@ -14,34 +14,35 @@ local status_enum = {
     WAITING  = 'waiting ',
 }
 
--- Bargain sub-steps (bargain flow only)
-local BARGAIN = {
-    SORT         = 1,  -- click the Sort button
-    SORT_WAIT    = 2,  -- wait for sort to settle
-    TRIBUTE      = 3,  -- right-click the chosen tribute in inventory
-    TRIBUTE_WAIT = 4,  -- wait after right-click
-    OPEN_MENU    = 5,  -- click bargain menu opener, wait for menu
-    SCROLL       = 6,  -- click scroll bar if needed
-    SELECT       = 7,  -- click the bargain option
-    READY        = 8,  -- bargain selected, proceed to Open Portal
+local CLICK_DELAY = 2.0  -- seconds to wait after every click action
+
+-- Steps shared by both flows. Bargain flow inserts extra steps between TRIBUTE_WAIT and OPEN_PORTAL.
+local STEP = {
+    TRIBUTE             = 1,
+    TRIBUTE_WAIT        = 2,
+    BARGAIN_OPEN        = 3,   -- bargain flow only: click bargain opener
+    BARGAIN_OPEN_WAIT   = 4,
+    BARGAIN_SCROLL      = 5,   -- bargain flow only: click scroll bar (if needed)
+    BARGAIN_SCROLL_WAIT = 6,
+    BARGAIN_SELECT      = 7,   -- bargain flow only: click bargain option
+    BARGAIN_SELECT_WAIT = 8,
+    OPEN_PORTAL         = 9,
+    OPEN_PORTAL_WAIT    = 10,
+    ACCEPT              = 11,
+    ACCEPT_WAIT         = 12,  -- waiting for portal actor to appear; timeout retries next bargain
 }
 
--- Inventory grid is 4 columns wide; slot index from get_item_slot_index(item, 4)
 local INVENTORY_COLS = 4
 
 local task = {
-    name            = 'enter_undercity',
-    status          = status_enum['IDLE'],
-    interacted      = false,
-    debounce_time   = -1,
-    -- no-bargain flow
-    accept_clicked  = false,
-    -- bargain flow
-    bargain_step       = 0,
-    bargain_step_time  = -1,
-    bargain_attempt_idx = 0,
-    bargain_walk_away  = false,
-    portal_click_start = -1,
+    name             = 'enter_undercity',
+    status           = status_enum['IDLE'],
+    interacted       = false,
+    debounce_time    = -1,
+    step             = 0,
+    step_time        = -1,
+    bargain_idx      = 0,    -- current index into sorted bargain list
+    bargain_walk_away = false,
 }
 
 local get_sorted_bargains = function ()
@@ -49,185 +50,188 @@ local get_sorted_bargains = function ()
     for i, bargain in ipairs(gui.bargains_data) do
         local p = settings.bargain_priorities[i]
         if p and p > 0 then
-            result[#result + 1] = {idx = i, priority = p, bargain = bargain}
+            result[#result + 1] = {priority = p, bargain = bargain}
         end
     end
     table.sort(result, function(a, b) return a.priority < b.priority end)
     return result
 end
 
-local reset_interaction_state = function ()
-    task.accept_clicked     = false
-    task.bargain_step       = 0
-    task.bargain_step_time  = -1
-    task.bargain_attempt_idx = 0
-    task.portal_click_start = -1
+local reset_state = function ()
+    task.step      = 0
+    task.step_time = -1
+    task.bargain_idx = 0
 end
 
--- Returns the screen position of a sigil inventory slot (0-based index, 4-col grid)
 local slot_screen_pos = function (slot_index)
     local col = slot_index % INVENTORY_COLS
     local row = math.floor(slot_index / INVENTORY_COLS)
-    local x = settings.inventory_slot_0_x + col * settings.inventory_cell_size
-    local y = settings.inventory_slot_0_y + row * settings.inventory_cell_size
-    return x, y
+    return settings.inventory_slot_0_x + col * settings.inventory_cell_size,
+           settings.inventory_slot_0_y + row * settings.inventory_cell_size
 end
 
--- ── No-bargain flow ──────────────────────────────────────────────────────────
--- Obelisk is already interacted; just click Accept and wait for portal
-local open_portal_simple = function ()
-    if not task.accept_clicked then
-        utility.send_mouse_click(settings.accept_button_x, settings.accept_button_y)
-        task.accept_clicked = true
+local pick_tribute = function ()
+    local lp = get_local_player()
+    if not lp then return end
+    local key_items = lp:get_dungeon_key_items()
+    if not key_items or #key_items == 0 then return end
+    local best_item, best_priority = nil, math.huge
+    for _, item in ipairs(key_items) do
+        local p = settings.tribute_priorities[item:get_sno_id()]
+        if p and p > 0 and p < best_priority then
+            best_item = item
+            best_priority = p
+        end
     end
-    task.status = status_enum['WAITING'] .. 'for portal'
+    return best_item or key_items[1], lp
 end
 
--- ── Bargain flow ─────────────────────────────────────────────────────────────
-local open_portal_bargain = function ()
+-- ── Step machine ─────────────────────────────────────────────────────────────
+local run_steps = function ()
     local now = get_time_since_inject()
 
-    -- ── Step 1: Sort inventory ──
-    if task.bargain_step == 0 then
-        task.bargain_step = BARGAIN.SORT
+    -- Initialise on first call after interact
+    if task.step == 0 then
+        task.step = STEP.TRIBUTE
     end
 
-    if task.bargain_step == BARGAIN.SORT then
-        local cp = settings.bargain_cp['sort_button']
-        utility.send_mouse_click(cp.x, cp.y)
-        task.bargain_step = BARGAIN.SORT_WAIT
-        task.bargain_step_time = now
-        task.status = status_enum['WAITING'] .. 'sort'
-        return
-    end
-
-    if task.bargain_step == BARGAIN.SORT_WAIT then
-        if now < task.bargain_step_time + 0.5 then
-            task.status = status_enum['WAITING'] .. 'sort'
-            return
+    -- Helper: waiting for delay after a click
+    local function waiting(label)
+        if now < task.step_time + CLICK_DELAY then
+            task.status = status_enum['WAITING'] .. label
+            return true
         end
-        task.bargain_step = BARGAIN.TRIBUTE
+        return false
     end
 
-    -- ── Step 2: Right-click the chosen tribute ──
-    if task.bargain_step == BARGAIN.TRIBUTE then
-        local lp = get_local_player()
-        if lp then
-            local key_items = lp:get_dungeon_key_items()
-            if key_items and #key_items > 0 then
-                -- Pick best-priority tribute
-                local best_item, best_priority = nil, math.huge
-                for _, item in ipairs(key_items) do
-                    local p = settings.tribute_priorities[item:get_sno_id()]
-                    if p and p > 0 and p < best_priority then
-                        best_item = item
-                        best_priority = p
-                    end
-                end
-                local chosen = best_item or key_items[1]
-                -- Get its slot index (bag type 4 = sigil/dungeon key bag)
-                local slot = lp:get_item_slot_index(chosen, 4)
-                local sx, sy = slot_screen_pos(slot)
-                utility.send_mouse_right_click(sx, sy)
-                task.bargain_step = BARGAIN.TRIBUTE_WAIT
-                task.bargain_step_time = now
-                task.status = status_enum['WAITING'] .. 'tribute placed'
-            end
+    -- ── Shared: tribute ───────────────────────────────────────────────────
+    if task.step == STEP.TRIBUTE then
+        local item, lp = pick_tribute()
+        if item and lp then
+            local slot = lp:get_item_slot_index(item, 4)
+            local sx, sy = slot_screen_pos(slot)
+            utility.send_mouse_right_click(sx, sy)
+            task.step = STEP.TRIBUTE_WAIT
+            task.step_time = now
+            task.status = status_enum['WAITING'] .. 'tribute'
         end
         return
     end
 
-    if task.bargain_step == BARGAIN.TRIBUTE_WAIT then
-        if now < task.bargain_step_time + 0.5 then
-            task.status = status_enum['WAITING'] .. 'tribute placed'
-            return
+    if task.step == STEP.TRIBUTE_WAIT then
+        if waiting('tribute') then return end
+        -- After tribute, branch on bargains
+        if settings.enable_bargains then
+            task.step = STEP.BARGAIN_OPEN
+        else
+            task.step = STEP.OPEN_PORTAL
         end
-        task.bargain_step = BARGAIN.OPEN_MENU
     end
 
-    -- ── Step 3: Select bargain ──
-    local sorted = get_sorted_bargains()
-
-    if task.bargain_step == BARGAIN.OPEN_MENU then
-        task.bargain_attempt_idx = task.bargain_attempt_idx + 1
-        if task.bargain_attempt_idx > #sorted then
-            -- No more bargains to try
-            task.bargain_step = BARGAIN.READY
+    -- ── Bargain only ──────────────────────────────────────────────────────
+    if task.step == STEP.BARGAIN_OPEN then
+        local sorted = get_sorted_bargains()
+        task.bargain_idx = task.bargain_idx + 1
+        if task.bargain_idx > #sorted then
+            -- All bargains exhausted without success — skip straight to portal
+            task.step = STEP.OPEN_PORTAL
         else
             local cp = settings.bargain_cp['bargain_opener']
             utility.send_mouse_click(cp.x, cp.y)
-            task.bargain_step_time = now
+            task.step = STEP.BARGAIN_OPEN_WAIT
+            task.step_time = now
             task.status = status_enum['WAITING'] .. 'bargain menu'
         end
         return
     end
 
-    -- Waiting for bargain menu to open
-    if task.bargain_step == BARGAIN.OPEN_MENU + 0 then end  -- handled above; keep for clarity
-
-    local current = sorted[task.bargain_attempt_idx]
-
-    if task.bargain_step == BARGAIN.OPEN_MENU and now >= task.bargain_step_time + 0.5 then
+    if task.step == STEP.BARGAIN_OPEN_WAIT then
+        if waiting('bargain menu') then return end
+        local sorted = get_sorted_bargains()
+        local current = sorted[task.bargain_idx]
         if current and current.bargain.needs_scroll then
-            local cp = settings.bargain_cp['scroll_bar']
-            utility.send_mouse_click(cp.x, cp.y)
-            task.bargain_step = BARGAIN.SCROLL
-            task.bargain_step_time = now
-            task.status = status_enum['WAITING'] .. 'scrolling'
+            task.step = STEP.BARGAIN_SCROLL
         else
-            task.bargain_step = BARGAIN.SELECT
-            task.bargain_step_time = now
+            task.step = STEP.BARGAIN_SELECT
         end
-        return
-    elseif task.bargain_step == BARGAIN.OPEN_MENU then
-        task.status = status_enum['WAITING'] .. 'bargain menu'
+    end
+
+    if task.step == STEP.BARGAIN_SCROLL then
+        local cp = settings.bargain_cp['scroll_bar']
+        utility.send_mouse_click(cp.x, cp.y)
+        task.step = STEP.BARGAIN_SCROLL_WAIT
+        task.step_time = now
+        task.status = status_enum['WAITING'] .. 'scroll'
         return
     end
 
-    if task.bargain_step == BARGAIN.SCROLL then
-        if now < task.bargain_step_time + 0.3 then
-            task.status = status_enum['WAITING'] .. 'scrolling'
-            return
-        end
-        task.bargain_step = BARGAIN.SELECT
-        task.bargain_step_time = now
-        return
+    if task.step == STEP.BARGAIN_SCROLL_WAIT then
+        if waiting('scroll') then return end
+        task.step = STEP.BARGAIN_SELECT
     end
 
-    if task.bargain_step == BARGAIN.SELECT then
-        if now < task.bargain_step_time + 0.3 then
-            task.status = status_enum['WAITING'] .. 'selecting bargain'
-            return
-        end
+    if task.step == STEP.BARGAIN_SELECT then
+        local sorted = get_sorted_bargains()
+        local current = sorted[task.bargain_idx]
         if current then
             local cp = settings.bargain_cp[current.bargain.cp_key]
             utility.send_mouse_click(cp.x, cp.y)
-            task.status = 'bargain: ' .. current.bargain.name
+            task.status = 'selecting: ' .. current.bargain.name
         end
-        task.bargain_step = BARGAIN.READY
-        task.portal_click_start = -1
+        task.step = STEP.BARGAIN_SELECT_WAIT
+        task.step_time = now
         return
     end
 
-    -- ── Step 4: Click Open Portal, handle timeout ──
-    if task.bargain_step == BARGAIN.READY then
-        if task.portal_click_start < 0 then
-            task.portal_click_start = now
-        elseif now > task.portal_click_start + settings.bargain_timeout then
-            -- Bargain failed — walk away to reset obelisk, retry next priority
-            task.bargain_walk_away = true
-            task.bargain_step = BARGAIN.OPEN_MENU   -- will increment attempt_idx on next interact
-            task.bargain_step_time = -1
-            task.portal_click_start = -1
-            task.status = 'bargain failed - walking away'
-            return
-        end
+    if task.step == STEP.BARGAIN_SELECT_WAIT then
+        if waiting('bargain select') then return end
+        task.step = STEP.OPEN_PORTAL
+    end
+
+    -- ── Shared: open portal ───────────────────────────────────────────────
+    if task.step == STEP.OPEN_PORTAL then
         utility.send_mouse_click(settings.portal_button_x, settings.portal_button_y)
-        task.status = status_enum['OPENING']
+        task.step = STEP.OPEN_PORTAL_WAIT
+        task.step_time = now
+        task.status = status_enum['WAITING'] .. 'open portal'
+        return
+    end
+
+    if task.step == STEP.OPEN_PORTAL_WAIT then
+        if waiting('open portal') then return end
+        task.step = STEP.ACCEPT
+    end
+
+    -- ── Shared: accept ────────────────────────────────────────────────────
+    if task.step == STEP.ACCEPT then
+        utility.send_mouse_click(settings.accept_button_x, settings.accept_button_y)
+        task.step = STEP.ACCEPT_WAIT
+        task.step_time = now
+        task.status = status_enum['WAITING'] .. 'accept'
+        return
+    end
+
+    if task.step == STEP.ACCEPT_WAIT then
+        if waiting('accept') then return end
+        -- Waiting for the portal actor to appear
+        if now > task.step_time + CLICK_DELAY + settings.bargain_timeout then
+            if settings.enable_bargains then
+                -- This bargain didn't have enough materials — walk away and retry
+                task.bargain_walk_away = true
+                task.step = STEP.BARGAIN_OPEN  -- will increment bargain_idx on next interact
+                task.step_time = -1
+                task.status = 'bargain failed - walking away'
+            else
+                -- No bargains: just retry accept
+                task.step = STEP.ACCEPT
+            end
+        else
+            task.status = status_enum['WAITING'] .. 'for portal'
+        end
     end
 end
 
--- ── Common wrapper ────────────────────────────────────────────────────────────
+-- ── Common obelisk wrapper ────────────────────────────────────────────────────
 local open_portal = function (delay)
     task.status = status_enum['OPENING']
     local spirit_brazier = utils.get_spirit_brazier()
@@ -237,18 +241,12 @@ local open_portal = function (delay)
         interact_object(spirit_brazier)
     elseif not task.interacted then
         task.interacted = true
-        reset_interaction_state()
+        reset_state()
     end
 
     if loot_manager:is_in_vendor_screen() then
-        if settings.enable_bargains then
-            open_portal_bargain()
-        else
-            open_portal_simple()
-        end
-    elseif delay and
-        task.debounce_time + settings.confirm_delay > get_time_since_inject()
-    then
+        run_steps()
+    elseif delay and task.debounce_time + settings.confirm_delay > get_time_since_inject() then
         task.status = status_enum['WAITING'] .. 'for confirmation'
         return
     else
@@ -270,12 +268,6 @@ local enter_portal = function (portal)
     task.status = status_enum['ENTERING']
 end
 
-local walk_to_activator = function (activator)
-    BatmobilePlugin.set_target(plugin_label, activator)
-    BatmobilePlugin.move(plugin_label)
-    task.status = status_enum['WALKING'] .. 'spirit brazier'
-end
-
 task.shouldExecute = function ()
     return utils.player_in_zone('Naha_Kurast')
 end
@@ -289,12 +281,11 @@ task.Execute = function ()
     local spirit_brazier = utils.get_spirit_brazier()
     local portal = utils.get_entrance_portal()
 
-    -- Walk away from obelisk to reset it after a failed bargain
+    -- Walk away from obelisk to reset after a failed bargain
     if task.bargain_walk_away then
         if spirit_brazier == nil or utils.distance(player_pos, spirit_brazier) > 10 then
             task.bargain_walk_away = false
             task.interacted = false
-            -- bargain_attempt_idx kept so next interact tries the next bargain
         else
             BatmobilePlugin.set_target(plugin_label, path[1])
             BatmobilePlugin.move(plugin_label)
@@ -313,7 +304,9 @@ task.Execute = function ()
         end
     elseif spirit_brazier == nil or utils.distance(player_pos, spirit_brazier) > 2 then
         if spirit_brazier ~= nil then
-            walk_to_activator(spirit_brazier)
+            BatmobilePlugin.set_target(plugin_label, spirit_brazier)
+            BatmobilePlugin.move(plugin_label)
+            task.status = status_enum['WALKING'] .. 'spirit brazier'
         end
     elseif not settings.party_enabled then
         BatmobilePlugin.clear_target(plugin_label)
